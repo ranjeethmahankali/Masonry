@@ -93,6 +93,7 @@ class brick:
 		elif vecAng > aspectAng and vecAng < (math.pi - aspectAng):
 			return self.dim[1]/math.sin(vecAng)
 
+#returns length per unit parameter atany point on a curve
 def distRatio(curID, param):
 	domain = rs.CurveDomain(curID)
 	sample = (domain[1] - domain[0])/1000000
@@ -149,89 +150,283 @@ def craziness(iterNum):
 	else:
 		return 0
 
+class bond:
+	def __init__(self, courseList, unitLength, unitHeight, dimension):
+		#this list contains all the details of all courses
+		self.course = courseList
+		self.unitL = unitLength
+		self.unitH = unitHeight
+		self.dim = dimension
+	
+	def placeSampleUnit(self, pos, vec):
+		u = rs.VectorUnitize(vec)
+		v = rs.VectorUnitize(rs.VectorRotate(vec,90,[0,0,1]))
+		
+		c = 0
+		while c < len(self.course):
+			b = 0
+			while b < len(self.course[c]):
+				p = self.course[c][b][0]
+				pVec = rs.VectorAdd(rs.VectorScale(u,p[0]*self.unitL), rs.VectorScale(v,p[1]*self.unitL))
+				newPos = rs.VectorAdd(pos,pVec)
+				newPos[2] = c*self.unitH
+				
+				type = self.course[c][b][1]
+				orientation = self.course[c][b][2]
+				
+				newBrick = brick(newPos, brickDim, type)
+				brickDir = rs.VectorRotate(u,orientation,[0,0,1])
+				newBrick.alignWith(brickDir)
+				
+				b += 1
+			c += 1
+		
 class Wall:
-	def __init__(self, curveID, lNum, ht):
+	def __init__(self, curveID, bondConfig, ht, mortarThickness = 10):
 		self.height = ht
-		self.mortarThickness = 10
-		self.centerLine = curveID
-		courseNum = ht/(brickDim[2]+self.mortarThickness)
+		self.mortarT = mortarThickness
+		self.pathID = curveID
+		courseNum = ht/(brickDim[2]+self.mortarT)
 		self.id = rs.AddGroup()
-		curveList = makeCurves(curveID, lNum, (brickDim[1]+self.mortarThickness))
+		
+		self.bond = bondConfig
+		
+		self.courseNum = self.height/self.bond.unitH
 		
 		self.brickCount = 0
 		
-		isEven = False
-		c = 0 # iterating variable representing the current course Number
-		while c < courseNum:
-			
-			layer = 0
-			layerEven = False
-			while layer < len(curveList):
-				curID = rs.CopyObject(curveList[layer], [0,0,0])
-				dom = rs.CurveDomain(curID)
-				p = dom[0]
-				pShiftLayer = (brickDim[0]/2)/distRatio(curID, p)
-				if layerEven:
-					p += pShiftLayer
-				
-				if isEven:
-					pShift = (brickDim[0]/4)/distRatio(curID, p)
-					p += pShift
-			
-				n = 0
-				nLimit = 8
-				while p <= dom[1]:
-					pt = rs.EvaluateCurve(curID, p)
-					block = brick(pt, brickDim)
-					self.brickCount += 1
-					
-					tangent = rs.CurveTangent(curID, p)
-					axis = rs.VectorCrossProduct(block.direction, tangent)
-					brickDir = rs.VectorRotate(tangent, craziness(n), axis)
-					aligned = block.alignWith(brickDir)
-					if not aligned:
-						print('Something went wrong with the alignment')
-					
-					#print(block.intercept(brickDir))
-					step = (block.intercept(tangent)/2)/distRatio(curID, p)
-					p += step
-					pt = rs.EvaluateCurve(curID, p)
-					block.moveTo(pt)
-					
-					# checking of the angle between the two vectors is almost 90
-					if abs(rs.VectorAngle(tangent, brickDir)-90) < 0.1:
-						#vector joining current point to closes point on the center line curve
-						unitNormal = rs.VectorUnitize(brickDir)
-						
-						moveVec = rs.VectorScale(unitNormal, block.dim[0]/4)
-						finalPt = rs.VectorAdd(block.base, moveVec)
-						
-						block.moveTo(finalPt)
-					
-					rs.AddObjectToGroup(block.id, self.id)
-					
-					step = ((block.intercept(tangent)/2)+self.mortarThickness)/distRatio(curID, p)
-					p += step
-					n += 1
-				
-				layer += 1
-				layerEven = not layerEven
-				rs.DeleteObject(curID)
-				
-			c += 1
-			isEven = not isEven
-			
-			zStep = brickDim[2]+self.mortarThickness
-			curveList = rs.MoveObjects(curveList, [0,0,zStep])
+		self.bondOptions = []
+	
+	def build(self):
+		dom = rs.CurveDomain(self.pathID)
+		uL = self.bond.unitL
 		
-		rs.DeleteObjects(curveList)
+		def traverseTo(uv,unitD, curID, startParam, morT):
+			dom = rs.CurveDomain(curID)
+			p1 = startParam
+			uCur = 0
+			while uCur < uv[0]:
+				pStep = 0.5*unitD/distRatio(curID, startParam)
+				p1 += pStep
+				
+				uCur += 0.5
+			
+			if p1 > dom[1]:
+				return [None, dom[1]]
+			
+			tan = rs.CurveTangent(curID, p1)
+			u = rs.VectorUnitize(tan)
+			v = rs.VectorRotate(u, 90, [0,0,1])
+			
+			pos = rs.EvaluateCurve(self.pathID, p1)
+			# now add the vcomponent to the pos
+			pos = rs.VectorAdd(pos, rs.VectorScale(v, (uv[1]*unitD)))
+			return [pos,p1]
 		
+		def decideCourse(cNum, bondCourses):
+			return (cNum-1)%bondCourses
+		
+		cN = 1
+		while cN <= self.courseNum:
+			c = decideCourse(cN, len(self.bond.course))
+			param = dom[0]
+			while param < dom[1]:
+				b = 0
+				while b < len(self.bond.course[c]):
+					#lay this particular brick
+					posParam = self.bond.course[c][b][0]
+					type = self.bond.course[c][b][1]
+					angle = self.bond.course[c][b][2]
+					
+					brickPos = traverseTo(posParam, uL, self.pathID, param,self.mortarT)[0]
+					zShift = [0,0,(cN-1)* self.bond.unitH]
+					
+					if brickPos is None:
+						b += 1
+					else:
+						#print(zShift, brickPos)
+						brickPos = rs.VectorAdd(brickPos, zShift)
+						
+						tangent = rs.CurveTangent(self.pathID, param)
+						u = rs.VectorUnitize(tangent)
+						v = rs.VectorRotate(u, 90, [0,0,1])
+						
+						brickDir = rs.VectorRotate(u, angle, [0,0,1])
+						
+						newBrick = brick(brickPos, [230,115,80], type)
+						rs.AddObjectToGroup(newBrick.id, self.id)
+						self.brickCount += 1
+						newBrick.alignWith(brickDir)
+							
+						b += 1
+				
+				reset = self.bond.dim
+				reset[1] = 0
+				pNew = traverseTo(reset, uL, self.pathID, param,self.mortarT)[1]
+				param = pNew
+				#rs.AddPoint(rs.EvaluateCurve(self.pathID, param))
+			cN += 1
+	
+	def buildRandom(self):
+		dom = rs.CurveDomain(self.pathID)
+		uL = self.bond.unitL
+		
+		def traverseTo(uv,unitD, curID, startParam, morT):
+			dom = rs.CurveDomain(curID)
+			p1 = startParam
+			uCur = 0
+			while uCur < uv[0]:
+				pStep = 0.5*unitD/distRatio(curID, startParam)
+				p1 += pStep
+				
+				uCur += 0.5
+			
+			if p1 > dom[1]:
+				return [None, dom[1]]
+			
+			tan = rs.CurveTangent(curID, p1)
+			u = rs.VectorUnitize(tan)
+			v = rs.VectorRotate(u, 90, [0,0,1])
+			
+			pos = rs.EvaluateCurve(self.pathID, p1)
+			# now add the vcomponent to the pos
+			pos = rs.VectorAdd(pos, rs.VectorScale(v, (uv[1]*unitD)))
+			return [pos,p1]
+		
+		def decideCourse(cNum, bondCourses):
+			return (cNum-1)%bondCourses
+		
+		cN = 1
+		while cN <= self.courseNum:
+			c = decideCourse(cN, len(self.bond.course))
+			param = dom[0]
+			while param < dom[1]:
+				b = 0
+				randNum = random.randint(1,len(self.bondOptions)) - 1
+				curBond = self.bondOptions[randNum]
+				while b < len(curBond .course[c]):
+					#lay this particular brick
+					
+					posParam = curBond .course[c][b][0]
+					type = curBond .course[c][b][1]
+					angle = curBond .course[c][b][2]
+					
+					brickPos = traverseTo(posParam, uL, self.pathID, param,self.mortarT)[0]
+					zShift = [0,0,(cN-1)* curBond .unitH]
+					
+					if brickPos is None:
+						b += 1
+					else:
+						#print(zShift, brickPos)
+						brickPos = rs.VectorAdd(brickPos, zShift)
+						
+						tangent = rs.CurveTangent(self.pathID, param)
+						u = rs.VectorUnitize(tangent)
+						v = rs.VectorRotate(u, 90, [0,0,1])
+						
+						brickDir = rs.VectorRotate(u, angle, [0,0,1])
+						
+						newBrick = brick(brickPos, [230,115,80], type)
+						rs.AddObjectToGroup(newBrick.id, self.id)
+						self.brickCount += 1
+						newBrick.alignWith(brickDir)
+							
+						b += 1
+				
+				reset = self.bond.dim
+				reset[1] = 0
+				pNew = traverseTo(reset, uL, self.pathID, param,self.mortarT)[1]
+				param = pNew
+				#rs.AddPoint(rs.EvaluateCurve(self.pathID, param))
+			cN += 1
+
+englishBondCourses = [
+					[#course1
+						[[0,0],0,0],
+						[[0,1],0,0]
+						],
+					[#course2
+						[[1.5,0,0,0],0,90],
+						[[2.5,0,0.5,0],0,90]
+						]
+					]
+
+flemishBondCourses = [
+					[#course1
+						[[0,0],0,0],
+						[[0,1],0,0],
+						[[3,0],0,90]
+						],
+					[#course2
+						[[1.5,0],0,90],
+						[[1.5,0],0,0],
+						[[1.5,1],0,0]
+						]
+					]
+
+bond1Courses = [
+				[#course1
+					[[0,0],0,0],
+					[[0,1],0,0]
+					],
+				[#course2
+					#[[1.5,0],0,90],
+					[[2.5,0],0,90]
+					]
+			]
+
+bond2Courses = [
+				[#course1
+					[[0,0],0,0]
+					,[[0,1],0,0]
+					],
+				[#course2
+					[[1.5,0],3,90]
+					,[[2.5,0],0,90]
+					,[[1.5,1.5],1,90]
+					]
+			]
+
+bond3Courses = [
+				[#course1
+					[[0,0],0,0]
+					,[[0,1],0,0]
+					],
+				[#course2
+					[[1.5,0],3,90]
+					,[[2.5,0],0,90]
+					#,[[1.5,1.5],1,0]
+					]
+			]
+
+englishBond = bond(englishBondCourses, 115, 80, [2,2])
+flemishBond = bond(flemishBondCourses, 115 , 80, [3,2])
+
+# this is an english bond with holes
+WallBond1 = bond(bond1Courses, 115, 80, [2,2])
+
+# this is an english bond with projections
+WallBond2 = bond(bond2Courses, 115, 80, [2,2])
+
+# this is an english bond with depressions
+WallBond3 = bond(bond3Courses, 115, 80, [2,2])
+
 brickDim = [230,115,80]
 curve = rs.GetCurveObject('Select Curve')
-layers = rs.GetInteger('Enter Number of Layers',1)
 height = rs.GetInteger('Enter Wall height', 2000)
 
 rs.EnableRedraw(False)
-newWall = Wall(curve[0], layers, height)
-#newBrick = brick([0,0,0], brickDim, 1)
+newWall = Wall(curve[0], WallBond3, height)
+newWall.bondOptions.append(WallBond1)
+newWall.bondOptions.append(WallBond2)
+newWall.bondOptions.append(WallBond3)
+newWall.bondOptions.append(englishBond)
+newWall.buildRandom()
+#newWall.build()
+print(newWall.brickCount)
+
 rs.EnableRedraw(True)
+
+#course =  []
+#course[i] = []
+#course[i][j] = [pos, type, orientation]

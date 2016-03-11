@@ -179,7 +179,7 @@ class bond:
 				type = self.course[c][b][1]
 				orientation = self.course[c][b][2]
 				
-				newBrick = brick(newPos, brickDim, type)
+				newBrick = brick(newPos, list(brickDim), type)
 				brickDir = rs.VectorRotate(u,orientation,[0,0,1])
 				newBrick.alignWith(brickDir)
 				
@@ -196,28 +196,52 @@ class Wall:
 		self.bond = bondConfig
 		
 		self.courseNum = math.ceil(self.height/self.bond.unitH)
-		print('Hello')
-		print(str(self.courseNum) + ' courses')
+		#print('Hello')
+		#print(str(self.courseNum) + ' courses')
 		
 		self.brickCount = 0
 		
 		self.bondOptions = []
 		
 		self.flip = False # make this -90 to flip the wall
-	
-	def placeStartBricks(self, startParam):
-		c = 0
-		while c < len(self.bond.startBricks):
-			b = 0
-			while b < len(self.bond.startBricks[c]):
-				pos = 1
-				b += 1
-			
-			c += 1
-	
+
 	def build(self):
 		dom = rs.CurveDomain(self.pathID)
 		uL = self.bond.unitL
+		
+		def placeBricks(startParam, extraCourse, courseNum):
+			c = decideCourse(courseNum, len(self.bond.course))
+			b = 0
+			while b < len(extraCourse[c]):
+				posParam = extraCourse[c][b][0]
+				type = extraCourse[c][b][1]
+				angle = extraCourse[c][b][2]
+				
+				traverse = traverseTo(posParam, uL, self.pathID, startParam, self.mortarT)
+				brickPos = traverse[0]
+				newP = traverse[1]
+				zShift = [0,0,(courseNum-1)*self.bond.unitH]
+				
+				if brickPos is None:
+					b += 1
+				else:
+					#print(zShift, brickPos)
+					brickPos = rs.VectorAdd(brickPos, zShift)
+					
+					tangent = rs.CurveTangent(self.pathID, newP)
+					u = rs.VectorUnitize(tangent)
+					if self.flip:
+						u = rs.VectorReverse(u)
+					v = rs.VectorRotate(u, 90, [0,0,1])
+					
+					brickDir = rs.VectorRotate(u, angle, [0,0,1])
+					
+					newBrick = brick(brickPos, list(brickDim), type)
+					rs.AddObjectToGroup(newBrick.id, self.id)
+					self.brickCount += 1
+					newBrick.alignWith(brickDir)
+						
+					b += 1
 		
 		def traverseTo(uv,unitD, curID, startParam, morT):
 			dom = rs.CurveDomain(curID)
@@ -249,6 +273,8 @@ class Wall:
 		cN = 1
 		while cN <= self.courseNum:
 			c = decideCourse(cN, len(self.bond.course))
+			#placing the bricks for a nice finishing at the start of the wall
+			placeBricks(dom[0],self.bond.startBricks,cN)
 			param = dom[0]
 			while param < dom[1]:
 				b = 0
@@ -277,7 +303,7 @@ class Wall:
 						
 						brickDir = rs.VectorRotate(u, angle, [0,0,1])
 						
-						newBrick = brick(brickPos, [230,115,80], type)
+						newBrick = brick(brickPos, list(brickDim), type)
 						rs.AddObjectToGroup(newBrick.id, self.id)
 						self.brickCount += 1
 						newBrick.alignWith(brickDir)
@@ -318,13 +344,50 @@ class Wall:
 			# now add the vcomponent to the pos
 			pos = rs.VectorAdd(pos, rs.VectorScale(v, (uv[1]*unitD)))
 			return [pos,p1]
-		
+			
+		def placeBricks(startParam, extraCourse, courseNum):
+			c = decideCourse(courseNum, len(self.bond.course))
+			b = 0
+			while b < len(extraCourse[c]):
+				posParam = extraCourse[c][b][0]
+				type = extraCourse[c][b][1]
+				angle = extraCourse[c][b][2]
+				
+				traverse = traverseTo(posParam, uL, self.pathID, startParam, self.mortarT)
+				brickPos = traverse[0]
+				newP = traverse[1]
+				zShift = [0,0,(courseNum-1)*self.bond.unitH]
+				
+				if brickPos is None:
+					b += 1
+				else:
+					#print(zShift, brickPos)
+					brickPos = rs.VectorAdd(brickPos, zShift)
+					
+					tangent = rs.CurveTangent(self.pathID, newP)
+					u = rs.VectorUnitize(tangent)
+					if self.flip:
+						u = rs.VectorReverse(u)
+					v = rs.VectorRotate(u, 90, [0,0,1])
+					
+					brickDir = rs.VectorRotate(u, angle, [0,0,1])
+					
+					newBrick = brick(brickPos, list(brickDim), type)
+					rs.AddObjectToGroup(newBrick.id, self.id)
+					self.brickCount += 1
+					newBrick.alignWith(brickDir)
+						
+					b += 1
+
 		def decideCourse(cNum, bondCourses):
 			return (cNum-1)%bondCourses
 		
 		cN = 1
 		while cN <= self.courseNum:
 			c = decideCourse(cN, len(self.bond.course))
+			#placing the bricks for a nice finishing at the start of the wall
+			placeBricks(dom[0],self.bond.startBricks,cN)
+			
 			param = dom[0]
 			while param < dom[1]:
 				b = 0
@@ -340,7 +403,7 @@ class Wall:
 					traverse = traverseTo(posParam, uL, self.pathID, param,self.mortarT)
 					brickPos = traverse[0]
 					newP = traverse[1]
-					zShift = [0,0,(cN-1)* curBond .unitH]
+					zShift = [0,0,(cN-1)*curBond.unitH]
 					
 					if brickPos is None:
 						b += 1
@@ -356,7 +419,7 @@ class Wall:
 						
 						brickDir = rs.VectorRotate(u, angle, [0,0,1])
 						
-						newBrick = brick(brickPos, [230,115,80], type)
+						newBrick = brick(brickPos, list(brickDim), type)
 						rs.AddObjectToGroup(newBrick.id, self.id)
 						self.brickCount += 1
 						newBrick.alignWith(brickDir)
@@ -468,6 +531,7 @@ newWall.bondOptions.append(WallBond3)
 
 rs.EnableRedraw(False)
 newWall.buildRandom()
+#newWall.build()
 rs.EnableRedraw(True)
 
 #course =  []

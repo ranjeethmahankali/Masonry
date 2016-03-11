@@ -186,16 +186,19 @@ class Wall:
 		self.height = ht
 		self.mortarT = mortarThickness
 		self.pathID = curveID
-		courseNum = ht/(brickDim[2]+self.mortarT)
 		self.id = rs.AddGroup()
 		
 		self.bond = bondConfig
 		
-		self.courseNum = self.height/self.bond.unitH
+		self.courseNum = math.ceil(self.height/self.bond.unitH)
+		print('Hello')
+		print(str(self.courseNum) + ' courses')
 		
 		self.brickCount = 0
 		
 		self.bondOptions = []
+		
+		self.flip = False # make this -90 to flip the wall
 	
 	def build(self):
 		dom = rs.CurveDomain(self.pathID)
@@ -216,6 +219,8 @@ class Wall:
 			
 			tan = rs.CurveTangent(curID, p1)
 			u = rs.VectorUnitize(tan)
+			if self.flip:
+				u = rs.VectorReverse(u)
 			v = rs.VectorRotate(u, 90, [0,0,1])
 			
 			pos = rs.EvaluateCurve(self.pathID, p1)
@@ -249,6 +254,8 @@ class Wall:
 						
 						tangent = rs.CurveTangent(self.pathID, param)
 						u = rs.VectorUnitize(tangent)
+						if self.flip:
+							u = rs.VectorReverse(u)
 						v = rs.VectorRotate(u, 90, [0,0,1])
 						
 						brickDir = rs.VectorRotate(u, angle, [0,0,1])
@@ -286,6 +293,8 @@ class Wall:
 			
 			tan = rs.CurveTangent(curID, p1)
 			u = rs.VectorUnitize(tan)
+			if self.flip:
+				u = rs.VectorReverse(u)
 			v = rs.VectorRotate(u, 90, [0,0,1])
 			
 			pos = rs.EvaluateCurve(self.pathID, p1)
@@ -322,6 +331,8 @@ class Wall:
 						
 						tangent = rs.CurveTangent(self.pathID, param)
 						u = rs.VectorUnitize(tangent)
+						if self.flip:
+							u = rs.VectorReverse(u)
 						v = rs.VectorRotate(u, 90, [0,0,1])
 						
 						brickDir = rs.VectorRotate(u, angle, [0,0,1])
@@ -412,20 +423,8 @@ WallBond2 = bond(bond2Courses, 115, 80, [2,2])
 WallBond3 = bond(bond3Courses, 115, 80, [2,2])
 
 brickDim = [230,115,80]
-curve = rs.GetCurveObject('Select Curve')
-height = rs.GetInteger('Enter Wall height', 2000)
-
-rs.EnableRedraw(False)
-newWall = Wall(curve[0], WallBond3, height)
-newWall.bondOptions.append(WallBond1)
-newWall.bondOptions.append(WallBond2)
-newWall.bondOptions.append(WallBond3)
-newWall.bondOptions.append(englishBond)
-newWall.buildRandom()
-#newWall.build()
-print(newWall.brickCount)
-
-rs.EnableRedraw(True)
+#curve = rs.GetCurveObject('Select Curve')
+#height = rs.GetInteger('Enter Wall height', 2000)
 
 #course =  []
 #course[i] = []

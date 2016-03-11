@@ -28,6 +28,8 @@ class brick:
 			dimension[0] = dimension[0]/4
 		elif self.type == 3: # this is a 3/4ths of a brick
 			dimension[0] = dimension[0]*3/4
+		elif self.type == 4: # this is a half brick cut along length
+			dimension[1] = dimension[1]/2
 		
 		self.dim = dimension
 		self.base = pos
@@ -151,9 +153,12 @@ def craziness(iterNum):
 		return 0
 
 class bond:
-	def __init__(self, courseList, unitLength, unitHeight, dimension):
+	def __init__(self, courseList,startCourse, endCourse, unitLength, unitHeight, dimension):
 		#this list contains all the details of all courses
 		self.course = courseList
+		self.startBricks = startCourse
+		self.endBricks = endCourse
+		
 		self.unitL = unitLength
 		self.unitH = unitHeight
 		self.dim = dimension
@@ -200,6 +205,16 @@ class Wall:
 		
 		self.flip = False # make this -90 to flip the wall
 	
+	def placeStartBricks(self, startParam):
+		c = 0
+		while c < len(self.bond.startBricks):
+			b = 0
+			while b < len(self.bond.startBricks[c]):
+				pos = 1
+				b += 1
+			
+			c += 1
+	
 	def build(self):
 		dom = rs.CurveDomain(self.pathID)
 		uL = self.bond.unitL
@@ -230,7 +245,7 @@ class Wall:
 		
 		def decideCourse(cNum, bondCourses):
 			return (cNum-1)%bondCourses
-		
+
 		cN = 1
 		while cN <= self.courseNum:
 			c = decideCourse(cN, len(self.bond.course))
@@ -243,7 +258,9 @@ class Wall:
 					type = self.bond.course[c][b][1]
 					angle = self.bond.course[c][b][2]
 					
-					brickPos = traverseTo(posParam, uL, self.pathID, param,self.mortarT)[0]
+					traverse = traverseTo(posParam, uL, self.pathID, param,self.mortarT)
+					brickPos = traverse[0]
+					newP = traverse[1]
 					zShift = [0,0,(cN-1)* self.bond.unitH]
 					
 					if brickPos is None:
@@ -252,7 +269,7 @@ class Wall:
 						#print(zShift, brickPos)
 						brickPos = rs.VectorAdd(brickPos, zShift)
 						
-						tangent = rs.CurveTangent(self.pathID, param)
+						tangent = rs.CurveTangent(self.pathID, newP)
 						u = rs.VectorUnitize(tangent)
 						if self.flip:
 							u = rs.VectorReverse(u)
@@ -320,7 +337,9 @@ class Wall:
 					type = curBond .course[c][b][1]
 					angle = curBond .course[c][b][2]
 					
-					brickPos = traverseTo(posParam, uL, self.pathID, param,self.mortarT)[0]
+					traverse = traverseTo(posParam, uL, self.pathID, param,self.mortarT)
+					brickPos = traverse[0]
+					newP = traverse[1]
 					zShift = [0,0,(cN-1)* curBond .unitH]
 					
 					if brickPos is None:
@@ -329,7 +348,7 @@ class Wall:
 						#print(zShift, brickPos)
 						brickPos = rs.VectorAdd(brickPos, zShift)
 						
-						tangent = rs.CurveTangent(self.pathID, param)
+						tangent = rs.CurveTangent(self.pathID, newP)
 						u = rs.VectorUnitize(tangent)
 						if self.flip:
 							u = rs.VectorReverse(u)
@@ -361,6 +380,23 @@ englishBondCourses = [
 						[[2.5,0,0.5,0],0,90]
 						]
 					]
+					
+englishStart = [
+				[#course1
+					#no starting bricks in 1st course
+					],
+				[
+					[[0.5,0],4,90]
+					]
+				]
+				
+englishEnd = [
+				[#course1
+					[[2.5,0],4,90]
+					],
+				[#no bricks in course 2
+					]
+				]
 
 flemishBondCourses = [
 					[#course1
@@ -410,21 +446,29 @@ bond3Courses = [
 					]
 			]
 
-englishBond = bond(englishBondCourses, 115, 80, [2,2])
-flemishBond = bond(flemishBondCourses, 115 , 80, [3,2])
+englishBond = bond(englishBondCourses, englishStart, englishEnd, 115, 80, [2,2])
+#flemishBond = bond(flemishBondCourses, 115 , 80, [3,2])
 
 # this is an english bond with holes
-WallBond1 = bond(bond1Courses, 115, 80, [2,2])
+WallBond1 = bond(bond1Courses, englishStart, englishEnd, 115, 80, [2,2])
 
 # this is an english bond with projections
-WallBond2 = bond(bond2Courses, 115, 80, [2,2])
+WallBond2 = bond(bond2Courses, englishStart, englishEnd, 115, 80, [2,2])
 
 # this is an english bond with depressions
-WallBond3 = bond(bond3Courses, 115, 80, [2,2])
+WallBond3 = bond(bond3Courses, englishStart, englishEnd, 115, 80, [2,2])
 
 brickDim = [230,115,80]
-#curve = rs.GetCurveObject('Select Curve')
-#height = rs.GetInteger('Enter Wall height', 2000)
+curve = rs.GetCurveObject('Select Curve')
+height = rs.GetInteger('Enter Wall height', 2000)
+
+newWall = Wall(curve[0], englishBond, height)
+newWall.bondOptions.append(WallBond2)
+newWall.bondOptions.append(WallBond3)
+
+rs.EnableRedraw(False)
+newWall.buildRandom()
+rs.EnableRedraw(True)
 
 #course =  []
 #course[i] = []
